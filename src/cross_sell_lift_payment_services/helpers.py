@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import math
 import scipy.stats as sps
 import statsmodels.api as sm
 from sklearn.linear_model import LogisticRegression
@@ -25,39 +26,49 @@ def eligible_incentives(df_row):
 
 
 
-def proportions_z_test(success_groupA, 
-                       success_groupB,
-                       total_groupA,
-                       total_groupB):
+def proportions_z_test(success_a, total_a, success_b, total_b, continuity=False):
     """
-    Perform a proportions z-test to compare the difference in proportions between two groups.
+    Two-proportion z-test (A vs B).
+    success_* : number of successes (ints)
+    total_*   : total trials (ints)
+    Returns dict with p1, p2, z, p_value, etc.
     """
-    # probability of success in each group
-    prob_success_groupA = success_groupA / total_groupA
-    prob_success_groupB = success_groupB / total_groupB
+    # validate
+    if total_a <= 0 or total_b <= 0:
+        return {
+            "prob_success_group_A": float("nan"),
+            "prob_success_group_B": float("nan"),
+            "z": float("nan"),
+            "p_value": float("nan"),
+            "n_a": int(total_a),
+            "n_b": int(total_b),
+            "note": "One of the groups has zero observations; z-test undefined."
+        }
 
-    # probability of success in the pool: weighted average of both groups.
-    # Under Null Hypothesis, the probability of success is the same for both groups, is the same as the pool.
+    p1 = success_a / total_a
+    p2 = success_b / total_b
+    p_pool = (success_a + success_b) / (total_a + total_b)
+    se = np.sqrt(p_pool * (1 - p_pool) * (1/total_a + 1/total_b))
 
-    prob_pool = (success_groupA + success_groupB) / (total_groupA + total_groupB)
-
-    # Standard Error of the difference in proportions
-
-    std_error = np.sqrt(prob_pool * (1 - prob_pool) * (1 / total_groupA + 1 / total_groupB))
-
-    # Z-score
-    z_score = 0.0 if std_error==0 else (prob_success_groupA - prob_success_groupB) / std_error
-
-    # Finally, computing p-value
-    if sps is not None:
-        p = 2 * sps.norm.cdf(abs(z_score))
+    if se == 0:
+        z = 0.0 if p1 == p2 else float("inf")
     else:
-        p = 2 * (1 - 0.5*(1+sps.erf(abs(z_score)/np.sqrt(2))))
+        diff = p1 - p2
+        if continuity:  # optional Yates correction
+            diff = np.copysign(max(0.0, abs(diff) - (1/total_a + 1/total_b)), diff)
+        z = diff / se
 
-    return {'prob_success_group_A': prob_success_groupA,
-            'prob_success_group_B': prob_success_groupB,
-            'z_score': z_score,
-            'p_value': p}
+    # two-sided p-value without scipy
+    p_value = 2 * (1 - 0.5 * (1 + math.erf(abs(z) / math.sqrt(2))))
+
+    return {
+        "prob_success_group_A": p1,
+        "prob_success_group_B": p2,
+        "z": z,
+        "p_value": p_value,
+        "n_a": int(total_a),
+        "n_b": int(total_b)
+    }
 
 # wald test, confidence interval for the difference in proportions
 
@@ -193,9 +204,9 @@ def agg_attach_accepted_paid(df):
             'accept_rate': accepted / size if size > 0 else np.nan,
             'paid_acceptance_rate': paid / size if size > 0 else np.nan
            }
-
-
-
+           
+def has_item(products, item):
+    return item in str(products).split("|")
 
 
 
