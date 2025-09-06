@@ -153,6 +153,22 @@ def km_curve(durations, events):
         times.append(t)
         at_risk -= len(grp)
     return np.array(times), np.array(surv)
+    
+# Benjamini–Hochberg FDR correction (no external libs)
+def fdr_bh(pvals):
+    """Benjamini–Hochberg FDR. Returns array of q-values (same order)."""
+    p = np.asarray(pvals, dtype=float)
+    n = p.size
+    order = np.argsort(p)
+    ranked = p[order]
+    q = np.empty(n, dtype=float)
+    prev = 1.0
+    for i in range(n-1, -1, -1):
+        q[i] = min(prev, ranked[i] * n / (i+1))
+        prev = q[i]
+    q_adj = np.empty(n, dtype=float)
+    q_adj[order] = q
+    return q_adj
 
 def logrank_test(t1, e1, t2, e2):
     all_times = np.unique(np.concatenate([t1, t2]))
